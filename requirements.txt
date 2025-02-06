@@ -1,0 +1,8 @@
+langchain
+dotenv
+langchainhub
+langchain-openai
+langchain-experimental
+qrcode
+pillow
+pandas
