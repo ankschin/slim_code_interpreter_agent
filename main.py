@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from dotenv import load_dotenv
 from langchain import hub
 from langchain_openai import ChatOpenAI
@@ -6,6 +7,9 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain_experimental.tools import PythonREPLTool
 from langchain_experimental.agents import create_csv_agent
 from langchain.callbacks.tracers import ConsoleCallbackHandler
+from langchain_core.tools import Tool
+
+
 
 
 load_dotenv()
@@ -44,7 +48,7 @@ def main():
     # )
 
 
-    csv_agent=create_csv_agent(
+    csv_agent_executor: AgentExecutor= create_csv_agent(
         llm= ChatOpenAI(temperature=0, model='gpt-4'),
         path= "episode_info.csv",
         verbose=True,
@@ -72,15 +76,55 @@ def main():
     #     config={"callbacks":[ConsoleCallbackHandler()]}
     # )
 
-    csv_agent.invoke(
-            input={
-                "input": "print seasons by number of episodes they have in ascending order."
-            },
-            config={"callbacks":[ConsoleCallbackHandler()]}
-        )
+    # csv_agent.invoke(
+    #         input={
+    #             "input": "print seasons by number of episodes they have in ascending order."
+    #         },
+    #         config={"callbacks":[ConsoleCallbackHandler()]}
+    #     )
     
 
     ###################################### Router Grand Agent  #########################################
+    
+    def python_agent_executor_wrapper(original_prompt: str) -> dict[str, Any]:
+        return python_agent_executor.invoke({"input": original_prompt})
 
+    tools= [
+        Tool(name= "Python Agent",
+             func= python_agent_executor_wrapper,
+             description= """useful when you need to transform natural language to python and
+             execute the python code, returning the results of the code execution.
+             DOES NOT ACCEPT CODE AS INPUT""",
+             ),
+        Tool(name="CSV Agent",
+             func= csv_agent_executor.invoke,
+             description="""Useful when you need to answer the question over episode_info.csv file.
+             Takes an input the question and returns the answer after running pandas calculations""")
+    ]
+    prompt= base_prompt.partial(instructions="")
+
+    grand_agent= create_react_agent(
+        prompt=prompt,
+        llm=ChatOpenAI(temperature=0, model="gpt-4-turbo"),
+        tools=tools
+    )
+
+
+    grand_agent_executor= AgentExecutor(agent=grand_agent,tools=tools, verbose=True)
+    print(grand_agent_executor.invoke(
+        {
+        "input":"Which season has most episodes?"
+        }
+    ))
+
+    print(grand_agent_executor.invoke(
+        {
+        "input":"""Generate and save in current working directory 15 qrcodes that point to 'www.google.com', you have qrcode package installed already"""
+        }
+    ))
+
+
+
+    
 if __name__== "__main__":
     main()
